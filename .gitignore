@@ -1,0 +1,5 @@
+.DS_Store
+.env
+.claude/
+openapi.txt
+node_modules/

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>D-Cerno Push-to-Talk</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>D-Cerno Push-to-Talk</h1>
+      <div id="active-bar" hidden>
+        <span id="live-dot" class="live-dot"></span>
+        <span id="live-label">Connecting&hellip;</span>
+        <span id="active-name"></span>
+        <button id="switch-btn" class="btn-ghost">Switch connection</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="connection-screen">
+        <h2>Saved connections</h2>
+        <ul id="connection-list" class="connection-list"></ul>
+
+        <form id="add-form" class="add-form">
+          <h3>Add a connection</h3>
+          <label>
+            IP address
+            <input name="ip" placeholder="192.168.0.20" required />
+          </label>
+          <label>
+            API key
+            <input name="apiKey" type="password" placeholder="API key" required />
+          </label>
+          <button type="submit" id="add-submit">Add &amp; connect</button>
+          <p id="connection-error" class="error" hidden></p>
+        </form>
+      </section>
+
+      <section id="dashboard-screen" hidden>
+        <div class="bulk-actions">
+          <button id="all-off-btn" class="btn-sm btn-all-off">All Off</button>
+          <button id="all-off-except-chair-btn" class="btn-sm btn-all-off-except-chair">All Off Except Chair</button>
+        </div>
+        <div id="seat-grid" class="seat-grid"></div>
+        <p id="dashboard-empty" class="empty-note" hidden>No seats found on this unit.</p>
+      </section>
+    </main>
+
+    <footer id="size-footer" class="size-footer" hidden>
+      <label for="seat-size-slider">Seat size</label>
+      <input type="range" id="seat-size-slider" min="44" max="120" step="2" value="72" />
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
