@@ -99,24 +99,65 @@ function showDashboardScreen() {
   els.sizeFooter.hidden = false;
   const conn = activeConnection();
   els.activeName.textContent = conn ? conn.ip : '';
+  updateSeatSizeBounds();
 }
 
 const SEAT_SIZE_KEY = 'dcernoSeatSize';
+const SEAT_GRID_COLUMNS = 10;
+const SEAT_GRID_GAP = 8; // must match the `gap` on .seat-grid in styles.css
+const SEAT_SIZE_MIN_FLOOR = 32;
+const SEAT_SIZE_DEFAULT_RATIO = 0.6; // fraction of full-width max used as the first-run default
+
+let seatSizeBoundsInitialized = false;
 
 function applySeatSize(px) {
   document.documentElement.style.setProperty('--seat-size', `${px}px`);
 }
 
-function initSeatSizeSlider() {
-  const saved = Number(localStorage.getItem(SEAT_SIZE_KEY));
-  const initial = saved && saved >= 44 && saved <= 120 ? saved : Number(els.seatSizeSlider.value);
-  els.seatSizeSlider.value = initial;
-  applySeatSize(initial);
+// The slider's max is however wide a card can be while still fitting all 10
+// columns in the grid's actual rendered width -- so dragging it all the way
+// up always reaches true full-width, on any screen size.
+function computeMaxSeatSize() {
+  const availableWidth = els.seatGrid.clientWidth;
+  if (availableWidth <= 0) return null;
+  return Math.floor((availableWidth - SEAT_GRID_GAP * (SEAT_GRID_COLUMNS - 1)) / SEAT_GRID_COLUMNS);
+}
 
+function updateSeatSizeBounds() {
+  const max = computeMaxSeatSize();
+  if (max == null) return; // grid isn't visible/laid out yet
+
+  const min = Math.min(SEAT_SIZE_MIN_FLOOR, max);
+  els.seatSizeSlider.min = String(min);
+  els.seatSizeSlider.max = String(max);
+
+  let value;
+  if (!seatSizeBoundsInitialized) {
+    const saved = Number(localStorage.getItem(SEAT_SIZE_KEY));
+    value = saved && saved >= min && saved <= max ? saved : Math.round(max * SEAT_SIZE_DEFAULT_RATIO);
+    seatSizeBoundsInitialized = true;
+  } else {
+    // A resize after the fact -- keep the current size, just re-clamp it
+    // into the new bounds instead of resetting to the default.
+    value = clamp(Number(els.seatSizeSlider.value) || min, min, max);
+  }
+
+  els.seatSizeSlider.value = String(value);
+  applySeatSize(value);
+  localStorage.setItem(SEAT_SIZE_KEY, String(value));
+}
+
+function initSeatSizeSlider() {
   els.seatSizeSlider.addEventListener('input', () => {
     const value = Number(els.seatSizeSlider.value);
     applySeatSize(value);
     localStorage.setItem(SEAT_SIZE_KEY, String(value));
+  });
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(updateSeatSizeBounds, 150);
   });
 }
 
@@ -306,6 +347,21 @@ function renderSeatGrid() {
   for (const seat of seats) {
     els.seatGrid.appendChild(buildSeatCard(seat));
   }
+
+  loadAllSensitivities();
+}
+
+async function loadAllSensitivities() {
+  try {
+    const { values } = await api('/api/seats/sensitivity');
+    for (const [seatStr, value] of Object.entries(values)) {
+      if (value == null) continue;
+      const card = els.seatGrid.querySelector(`[data-seat="${seatStr}"]`);
+      card?._sensitivityApi?.setValue(value);
+    }
+  } catch (err) {
+    console.error(`Failed to load sensitivities: ${err.message}`);
+  }
 }
 
 const ROLE_LABELS = { vip: 'VIP', chairperson: 'Chair', delegate: 'Delegate' };
@@ -315,34 +371,154 @@ function roleLabel(role) {
 }
 
 function buildSeatCard(seat) {
-  const card = document.createElement('button');
+  // A plain div, not a <button> -- the sensitivity slider below is
+  // interactive content, which the HTML content model forbids inside a
+  // <button> (browsers silently break the markup apart when parsed).
+  const card = document.createElement('div');
   card.className = 'seat-card';
   card.dataset.seat = String(seat.seatNumber);
   applySeatCardState(card, seat);
 
   card.innerHTML = `
+    <span class="sensitivity-badge">&ndash;</span>
     <span class="seat-number">${seat.seatNumber}</span>
     <span class="mic-icon-wrap">
       <span class="icon icon-normal">${MIC_ICON}</span>
       <span class="icon icon-muted">${MIC_MUTED_ICON}</span>
     </span>
     <span class="role-tag role-${seat.role || 'none'}">${roleLabel(seat.role)}</span>
+    <div class="sensitivity-popover">
+      <div class="sensitivity-value">&mdash;</div>
+      <div class="sensitivity-slider-wrap">
+        <input type="range" class="sensitivity-slider" min="-12" max="12" step="1" value="0" />
+      </div>
+      <div class="sensitivity-caption">Sensitivity</div>
+    </div>
   `;
 
   card.addEventListener('click', () => toggleMic(seat.seatNumber));
+  card._sensitivityApi = wireSensitivityPopover(card, seat.seatNumber);
   return card;
 }
 
 function applySeatCardState(card, seat) {
   card.classList.toggle('mic-on', Boolean(seat.microphoneOn));
   card.classList.toggle('offline', !seat.online);
-  card.disabled = !seat.online;
 
   const roleTag = card.querySelector('.role-tag');
   if (roleTag) {
     roleTag.textContent = roleLabel(seat.role);
     roleTag.className = `role-tag role-${seat.role || 'none'}`;
   }
+}
+
+function formatSensitivity(value) {
+  const n = Number(value);
+  return n > 0 ? `+${n} dB` : `${n} dB`;
+}
+
+function formatSensitivityCompact(value) {
+  const n = Number(value);
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function wireSensitivityPopover(card, seatNumber) {
+  const popover = card.querySelector('.sensitivity-popover');
+  const slider = popover.querySelector('.sensitivity-slider');
+  const valueEl = popover.querySelector('.sensitivity-value');
+  const badge = card.querySelector('.sensitivity-badge');
+  let loaded = false;
+  let debounceTimer = null;
+
+  // Updates the always-visible corner badge and the hover popover's
+  // readout together, so they never fall out of sync with each other.
+  const render = (value) => {
+    valueEl.textContent = formatSensitivity(value);
+    badge.textContent = formatSensitivityCompact(value);
+  };
+
+  const commit = (value) => {
+    api(`/api/seats/${seatNumber}/sensitivity`, { method: 'PUT', body: JSON.stringify({ value }) }).catch((err) =>
+      console.error(`Failed to set sensitivity for seat ${seatNumber}: ${err.message}`)
+    );
+  };
+
+  card.addEventListener('mouseenter', async () => {
+    try {
+      const { value } = await api(`/api/seats/${seatNumber}/sensitivity`);
+      slider.value = value;
+      render(value);
+      loaded = true;
+    } catch (err) {
+      valueEl.textContent = '—';
+      console.error(`Failed to load sensitivity for seat ${seatNumber}: ${err.message}`);
+    }
+  });
+
+  // Keep interactions with the slider from bubbling up to the card's own
+  // click handler (which toggles the mic).
+  popover.addEventListener('mousedown', (e) => e.stopPropagation());
+  popover.addEventListener('click', (e) => e.stopPropagation());
+
+  slider.addEventListener('input', () => {
+    if (!loaded) return;
+    render(Number(slider.value));
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => commit(Number(slider.value)), 150);
+  });
+
+  slider.addEventListener('change', () => {
+    if (!loaded) return;
+    clearTimeout(debounceTimer);
+    commit(Number(slider.value));
+  });
+
+  // Mouse wheel or trackpad two-finger scroll over the card also adjusts
+  // sensitivity -- scroll up increases, scroll down decreases. Deltas are
+  // accumulated so a fast mouse-wheel notch and a slow trackpad scroll both
+  // feel proportionate instead of the trackpad racing through the range.
+  let wheelAccum = 0;
+  const WHEEL_STEP_THRESHOLD = 40;
+
+  card.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      if (!loaded) return;
+
+      wheelAccum -= e.deltaY;
+      let value = Number(slider.value);
+      let changed = false;
+
+      while (Math.abs(wheelAccum) >= WHEEL_STEP_THRESHOLD) {
+        const direction = wheelAccum > 0 ? 1 : -1;
+        wheelAccum -= direction * WHEEL_STEP_THRESHOLD;
+        const next = clamp(value + direction, -12, 12);
+        if (next === value) continue;
+        value = next;
+        changed = true;
+      }
+
+      if (!changed) return;
+      slider.value = value;
+      render(value);
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => commit(value), 150);
+    },
+    { passive: false }
+  );
+
+  return {
+    setValue(value) {
+      slider.value = value;
+      render(value);
+      loaded = true;
+    },
+  };
 }
 
 function upsertSeat(seat) {

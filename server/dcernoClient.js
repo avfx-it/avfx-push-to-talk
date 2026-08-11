@@ -67,6 +67,18 @@ class DCernoClient {
     });
   }
 
+  getInputSensitivityOffset(seatNumber) {
+    return this.request(`/api/audio/seats/${seatNumber}/inputsensitivityoffset`, { timeoutMs: 8000 });
+  }
+
+  setInputSensitivityOffset(seatNumber, offset) {
+    return this.request(`/api/audio/seats/${seatNumber}/inputsensitivityoffset`, {
+      method: 'PUT',
+      body: { input_sensitivity_offset: offset },
+      timeoutMs: 8000,
+    });
+  }
+
   // Long-poll: the D-Cerno unit holds the connection open until an event
   // arrives or it times out server-side, so this call itself blocks for a
   // while. No client-side timeout is applied beyond a generous safety net.

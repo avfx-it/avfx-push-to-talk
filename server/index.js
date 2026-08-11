@@ -115,6 +115,53 @@ app.put('/api/seats/:seat/mic', async (req, res) => {
   }
 });
 
+app.get('/api/seats/sensitivity', async (req, res) => {
+  const active = getActiveConnection(req);
+  if (!active) return res.status(400).json({ error: 'No active connection' });
+
+  try {
+    const values = await connectionManager.getAllSensitivities(active.ip, active.apiKey);
+    res.json({ values });
+  } catch (err) {
+    res.status(502).json({ error: `Failed to fetch sensitivities: ${err.message}` });
+  }
+});
+
+app.get('/api/seats/:seat/sensitivity', async (req, res) => {
+  const active = getActiveConnection(req);
+  if (!active) return res.status(400).json({ error: 'No active connection' });
+
+  const seatNumber = Number(req.params.seat);
+  if (!Number.isInteger(seatNumber)) {
+    return res.status(400).json({ error: 'seat must be an integer' });
+  }
+
+  try {
+    const value = await connectionManager.getSensitivity(active.ip, active.apiKey, seatNumber);
+    res.json({ value });
+  } catch (err) {
+    res.status(502).json({ error: `Failed to fetch sensitivity: ${err.message}` });
+  }
+});
+
+app.put('/api/seats/:seat/sensitivity', async (req, res) => {
+  const active = getActiveConnection(req);
+  if (!active) return res.status(400).json({ error: 'No active connection' });
+
+  const seatNumber = Number(req.params.seat);
+  const { value } = req.body || {};
+  if (!Number.isInteger(seatNumber) || !Number.isInteger(value) || value < -12 || value > 12) {
+    return res.status(400).json({ error: 'seat must be an integer and body.value must be an integer from -12 to 12' });
+  }
+
+  try {
+    await connectionManager.setSensitivity(active.ip, active.apiKey, seatNumber, value);
+    res.status(204).end();
+  } catch (err) {
+    res.status(502).json({ error: `Failed to set sensitivity: ${err.message}` });
+  }
+});
+
 app.post('/api/seats/all-off', async (req, res) => {
   const active = getActiveConnection(req);
   if (!active) return res.status(400).json({ error: 'No active connection' });

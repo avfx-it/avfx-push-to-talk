@@ -161,6 +161,33 @@ class ConnectionManager {
     await unit.client.setMicrophone(seatNumber, on, existing?.requestingToSpeak);
   }
 
+  async getSensitivity(ip, apiKey, seatNumber) {
+    const unit = await this.getOrCreateUnit(ip, apiKey);
+    const result = await unit.client.getInputSensitivityOffset(seatNumber);
+    return result.input_sensitivity_offset;
+  }
+
+  async getAllSensitivities(ip, apiKey) {
+    const unit = await this.getOrCreateUnit(ip, apiKey);
+    const seatNumbers = unit.seatList().map((seat) => seat.seatNumber);
+    const entries = await Promise.all(
+      seatNumbers.map(async (seatNumber) => {
+        try {
+          const result = await unit.client.getInputSensitivityOffset(seatNumber);
+          return [seatNumber, result.input_sensitivity_offset];
+        } catch {
+          return [seatNumber, null];
+        }
+      })
+    );
+    return Object.fromEntries(entries);
+  }
+
+  async setSensitivity(ip, apiKey, seatNumber, offset) {
+    const unit = await this.getOrCreateUnit(ip, apiKey);
+    await unit.client.setInputSensitivityOffset(seatNumber, offset);
+  }
+
   async turnOffMicrophones(ip, apiKey, { exceptRoles = [] } = {}) {
     const unit = await this.getOrCreateUnit(ip, apiKey);
     const targets = unit
