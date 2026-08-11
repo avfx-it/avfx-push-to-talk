@@ -5,15 +5,11 @@ const http = require('http');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const { WebSocketServer } = require('ws');
-const { v4: uuidv4 } = require('uuid');
 
 const { ConnectionManager } = require('./connectionManager');
-const { DCernoError } = require('./dcernoClient');
 const {
-  readConnections,
-  readActiveId,
-  writeConnections,
-  writeActiveId,
+  readConnection,
+  writeConnection,
   publicView,
   getActiveConnection,
   getActiveConnectionFromHeader,
@@ -33,61 +29,36 @@ app.get('/api/dev-defaults', (req, res) => {
   res.json({ apiKey: isProd ? null : process.env.TELEVIC_API_KEY || null });
 });
 
-app.get('/api/connections', (req, res) => {
-  const connections = readConnections(req);
-  const activeId = readActiveId(req);
-  res.json(publicView(connections, activeId));
+app.get('/api/connection', (req, res) => {
+  res.json(publicView(readConnection(req)));
 });
 
-app.post('/api/connections', async (req, res) => {
-  const { ip, apiKey } = req.body || {};
+// Also used to edit the single connection in place: any field left blank
+// keeps its existing value, so the settings modal can change just the IP
+// (or just rotate the key) without re-entering everything.
+app.put('/api/connection', async (req, res) => {
+  const existing = readConnection(req);
+  const ip = (req.body?.ip || '').trim() || existing?.ip;
+  const apiKey = (req.body?.apiKey || '').trim() || existing?.apiKey;
+
   if (!ip || !apiKey) {
-    return res.status(400).json({ error: 'ip and apiKey are required' });
+    return res.status(400).json({ error: 'IP address and API key are required.' });
   }
 
   try {
     await connectionManager.testConnection(ip, apiKey);
   } catch (err) {
-    const status = err instanceof DCernoError ? 502 : 502;
-    return res.status(status).json({ error: `Could not connect to unit: ${err.message}` });
+    return res.status(502).json({ error: `Could not connect to the unit: ${err.message}` });
   }
 
-  const connections = readConnections(req);
-  const newConnection = { id: uuidv4(), ip, apiKey };
-  connections.push(newConnection);
-
-  writeConnections(res, connections);
-  writeActiveId(res, newConnection.id);
-
-  res.json(publicView(connections, newConnection.id));
-});
-
-app.delete('/api/connections/:id', (req, res) => {
-  const connections = readConnections(req);
-  const activeId = readActiveId(req);
-  const remaining = connections.filter((c) => c.id !== req.params.id);
-
-  writeConnections(res, remaining);
-  const nextActiveId = activeId === req.params.id ? null : activeId;
-  writeActiveId(res, nextActiveId);
-
-  res.json(publicView(remaining, nextActiveId));
-});
-
-app.post('/api/connections/:id/activate', (req, res) => {
-  const connections = readConnections(req);
-  const target = connections.find((c) => c.id === req.params.id);
-  if (!target) {
-    return res.status(404).json({ error: 'Connection not found' });
-  }
-
-  writeActiveId(res, target.id);
-  res.json(publicView(connections, target.id));
+  const connection = { ip, apiKey };
+  writeConnection(res, connection);
+  res.json(publicView(connection));
 });
 
 app.get('/api/seats', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   try {
     const seats = await connectionManager.getSeats(active.ip, active.apiKey);
@@ -99,12 +70,12 @@ app.get('/api/seats', async (req, res) => {
 
 app.put('/api/seats/:seat/mic', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   const seatNumber = Number(req.params.seat);
   const { on } = req.body || {};
   if (!Number.isInteger(seatNumber) || typeof on !== 'boolean') {
-    return res.status(400).json({ error: 'seat must be an integer and body.on must be boolean' });
+    return res.status(400).json({ error: 'Seat must be an integer and the mic state must be true or false.' });
   }
 
   try {
@@ -117,7 +88,7 @@ app.put('/api/seats/:seat/mic', async (req, res) => {
 
 app.get('/api/seats/sensitivity', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   try {
     const values = await connectionManager.getAllSensitivities(active.ip, active.apiKey);
@@ -129,11 +100,11 @@ app.get('/api/seats/sensitivity', async (req, res) => {
 
 app.get('/api/seats/:seat/sensitivity', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   const seatNumber = Number(req.params.seat);
   if (!Number.isInteger(seatNumber)) {
-    return res.status(400).json({ error: 'seat must be an integer' });
+    return res.status(400).json({ error: 'Seat must be an integer.' });
   }
 
   try {
@@ -146,12 +117,14 @@ app.get('/api/seats/:seat/sensitivity', async (req, res) => {
 
 app.put('/api/seats/:seat/sensitivity', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   const seatNumber = Number(req.params.seat);
   const { value } = req.body || {};
   if (!Number.isInteger(seatNumber) || !Number.isInteger(value) || value < -12 || value > 12) {
-    return res.status(400).json({ error: 'seat must be an integer and body.value must be an integer from -12 to 12' });
+    return res
+      .status(400)
+      .json({ error: 'Seat must be an integer and sensitivity must be a whole number from -12 to 12.' });
   }
 
   try {
@@ -164,7 +137,7 @@ app.put('/api/seats/:seat/sensitivity', async (req, res) => {
 
 app.post('/api/seats/all-off', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   try {
     await connectionManager.turnOffMicrophones(active.ip, active.apiKey);
@@ -176,7 +149,7 @@ app.post('/api/seats/all-off', async (req, res) => {
 
 app.post('/api/seats/all-off-except-chair', async (req, res) => {
   const active = getActiveConnection(req);
-  if (!active) return res.status(400).json({ error: 'No active connection' });
+  if (!active) return res.status(400).json({ error: 'No connection configured.' });
 
   try {
     await connectionManager.turnOffMicrophones(active.ip, active.apiKey, { exceptRoles: ['chairperson'] });

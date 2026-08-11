@@ -1,5 +1,11 @@
 const { DCernoClient } = require('./dcernoClient');
 
+// A page refresh closes the old WebSocket and opens a new one a moment
+// later -- without this grace period, the last-subscriber-leaves teardown
+// would tear down the Unit (and its warmed-up seat cache) right before the
+// new page's GET /api/seats needs it, forcing a slow from-scratch rebuild.
+const UNIT_TEARDOWN_GRACE_MS = 5000;
+
 function unitKey(ip, apiKey) {
   return `${ip}::${apiKey}`;
 }
@@ -28,6 +34,23 @@ class Unit {
     this.minimumId = null;
     this.polling = false;
     this.stopped = false;
+    this.teardownTimer = null;
+  }
+
+  scheduleTeardown(onTeardown) {
+    this.cancelScheduledTeardown();
+    this.teardownTimer = setTimeout(() => {
+      this.teardownTimer = null;
+      this.stopPolling();
+      onTeardown();
+    }, UNIT_TEARDOWN_GRACE_MS);
+  }
+
+  cancelScheduledTeardown() {
+    if (this.teardownTimer) {
+      clearTimeout(this.teardownTimer);
+      this.teardownTimer = null;
+    }
   }
 
   seatList() {
@@ -136,12 +159,14 @@ class ConnectionManager {
   async getOrCreateUnit(ip, apiKey) {
     const key = unitKey(ip, apiKey);
     let unit = this.units.get(key);
-    if (!unit) {
-      unit = new Unit(ip, apiKey);
-      this.units.set(key, unit);
-      await unit.init();
-      unit.startPolling();
+    if (unit) {
+      unit.cancelScheduledTeardown();
+      return unit;
     }
+    unit = new Unit(ip, apiKey);
+    this.units.set(key, unit);
+    await unit.init();
+    unit.startPolling();
     return unit;
   }
 
@@ -211,8 +236,7 @@ class ConnectionManager {
     if (!unit) return;
     unit.subscribers.delete(ws);
     if (unit.subscribers.size === 0) {
-      unit.stopPolling();
-      this.units.delete(key);
+      unit.scheduleTeardown(() => this.units.delete(key));
     }
   }
 }

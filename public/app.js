@@ -38,10 +38,9 @@ const els = {
   liveDot: document.getElementById('live-dot'),
   liveLabel: document.getElementById('live-label'),
   activeName: document.getElementById('active-name'),
-  switchBtn: document.getElementById('switch-btn'),
+  settingsBtn: document.getElementById('settings-btn'),
   connectionScreen: document.getElementById('connection-screen'),
   dashboardScreen: document.getElementById('dashboard-screen'),
-  connectionList: document.getElementById('connection-list'),
   addForm: document.getElementById('add-form'),
   addSubmit: document.getElementById('add-submit'),
   connectionError: document.getElementById('connection-error'),
@@ -52,11 +51,17 @@ const els = {
   allOffBtn: document.getElementById('all-off-btn'),
   allOffExceptChairBtn: document.getElementById('all-off-except-chair-btn'),
   fullscreenBtn: document.getElementById('fullscreen-btn'),
+  settingsModal: document.getElementById('settings-modal'),
+  settingsForm: document.getElementById('settings-form'),
+  settingsIp: document.getElementById('settings-ip'),
+  settingsApiKey: document.getElementById('settings-apikey'),
+  settingsSaveBtn: document.getElementById('settings-save-btn'),
+  settingsCancelBtn: document.getElementById('settings-cancel-btn'),
+  settingsError: document.getElementById('settings-error'),
 };
 
 const state = {
-  connections: [],
-  activeId: null,
+  connectionIp: null,
   seats: new Map(),
   ws: null,
   wsRetryMs: 1000,
@@ -81,10 +86,6 @@ async function api(url, options) {
   return res.json();
 }
 
-function activeConnection() {
-  return state.connections.find((c) => c.id === state.activeId) || null;
-}
-
 function showConnectionScreen() {
   els.connectionScreen.hidden = false;
   els.dashboardScreen.hidden = true;
@@ -97,16 +98,17 @@ function showDashboardScreen() {
   els.dashboardScreen.hidden = false;
   els.activeBar.hidden = false;
   els.sizeFooter.hidden = false;
-  const conn = activeConnection();
-  els.activeName.textContent = conn ? conn.ip : '';
+  els.activeName.textContent = state.connectionIp || '';
   updateSeatSizeBounds();
 }
 
 const SEAT_SIZE_KEY = 'dcernoSeatSize';
 const SEAT_GRID_COLUMNS = 10;
 const SEAT_GRID_GAP = 8; // must match the `gap` on .seat-grid in styles.css
+const SEAT_CARD_ASPECT_RATIO = 16 / 9; // width:height, must match .seat-card in styles.css
 const SEAT_SIZE_MIN_FLOOR = 32;
 const SEAT_SIZE_DEFAULT_RATIO = 0.6; // fraction of full-width max used as the first-run default
+const SEAT_SIZE_HEIGHT_SAFETY_MARGIN = 12; // breathing room below the last row
 
 let seatSizeBoundsInitialized = false;
 
@@ -114,13 +116,25 @@ function applySeatSize(px) {
   document.documentElement.style.setProperty('--seat-size', `${px}px`);
 }
 
-// The slider's max is however wide a card can be while still fitting all 10
-// columns in the grid's actual rendered width -- so dragging it all the way
-// up always reaches true full-width, on any screen size.
+// The slider's max is bounded by whichever runs out first: card width (must
+// fit all 10 columns across) or card height (all rows must fit under the
+// header/footer without the page scrolling). Without the height half of
+// this, a large card size could fit widthwise but still push the grid
+// taller than the viewport -- which triggers a vertical scrollbar, which
+// narrows the usable width, which then triggers a horizontal one too.
 function computeMaxSeatSize() {
   const availableWidth = els.seatGrid.clientWidth;
   if (availableWidth <= 0) return null;
-  return Math.floor((availableWidth - SEAT_GRID_GAP * (SEAT_GRID_COLUMNS - 1)) / SEAT_GRID_COLUMNS);
+  const maxByWidth = Math.floor((availableWidth - SEAT_GRID_GAP * (SEAT_GRID_COLUMNS - 1)) / SEAT_GRID_COLUMNS);
+
+  const rows = Math.max(1, Math.ceil((state.seats.size || SEAT_GRID_COLUMNS) / SEAT_GRID_COLUMNS));
+  const gridTop = els.seatGrid.getBoundingClientRect().top;
+  const footerHeight = els.sizeFooter.hidden ? 0 : els.sizeFooter.offsetHeight;
+  const availableHeight = window.innerHeight - gridTop - footerHeight - SEAT_SIZE_HEIGHT_SAFETY_MARGIN;
+  const maxCardHeight = (availableHeight - SEAT_GRID_GAP * (rows - 1)) / rows;
+  const maxByHeight = Math.floor(maxCardHeight * SEAT_CARD_ASPECT_RATIO);
+
+  return Math.max(20, Math.min(maxByWidth, maxByHeight));
 }
 
 function updateSeatSizeBounds() {
@@ -219,78 +233,16 @@ function initFullscreenButton() {
   });
 }
 
-function renderConnectionList() {
-  els.connectionList.innerHTML = '';
-  if (state.connections.length === 0) {
-    const li = document.createElement('li');
-    li.textContent = 'No saved connections yet.';
-    li.style.color = 'var(--text-dim)';
-    els.connectionList.appendChild(li);
-    return;
-  }
+async function loadConnection() {
+  const data = await api('/api/connection');
+  state.connectionIp = data.ip;
 
-  for (const conn of state.connections) {
-    const li = document.createElement('li');
-
-    const info = document.createElement('span');
-    info.className = 'connection-info';
-    info.innerHTML = `<span class="ip">${escapeHtml(conn.ip)}</span>`;
-
-    const actions = document.createElement('span');
-    actions.className = 'connection-actions';
-
-    if (conn.id === state.activeId) {
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = 'Active';
-      actions.appendChild(badge);
-    } else {
-      const connectBtn = document.createElement('button');
-      connectBtn.className = 'btn-sm';
-      connectBtn.textContent = 'Connect';
-      connectBtn.addEventListener('click', () => activateConnection(conn.id));
-      actions.appendChild(connectBtn);
-    }
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn-sm danger';
-    removeBtn.textContent = 'Remove';
-    removeBtn.addEventListener('click', () => removeConnection(conn.id));
-    actions.appendChild(removeBtn);
-
-    li.appendChild(info);
-    li.appendChild(actions);
-    els.connectionList.appendChild(li);
-  }
-}
-
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-async function loadConnections() {
-  const data = await api('/api/connections');
-  state.connections = data.connections;
-  state.activeId = data.activeId;
-  renderConnectionList();
-
-  if (state.activeId && activeConnection()) {
+  if (state.connectionIp) {
     showDashboardScreen();
     await enterDashboard();
   } else {
     showConnectionScreen();
   }
-}
-
-async function activateConnection(id) {
-  await api(`/api/connections/${id}/activate`, { method: 'POST' });
-  await loadConnections();
-}
-
-async function removeConnection(id) {
-  closeSocket();
-  await api(`/api/connections/${id}`, { method: 'DELETE' });
-  await loadConnections();
 }
 
 els.addForm.addEventListener('submit', async (e) => {
@@ -306,21 +258,62 @@ els.addForm.addEventListener('submit', async (e) => {
   };
 
   try {
-    await api('/api/connections', { method: 'POST', body: JSON.stringify(payload) });
+    await api('/api/connection', { method: 'PUT', body: JSON.stringify(payload) });
     els.addForm.reset();
-    await loadConnections();
+    await loadConnection();
   } catch (err) {
     els.connectionError.textContent = err.message;
     els.connectionError.hidden = false;
   } finally {
     els.addSubmit.disabled = false;
-    els.addSubmit.textContent = 'Add & connect';
+    els.addSubmit.textContent = 'Connect';
   }
 });
 
-els.switchBtn.addEventListener('click', () => {
-  closeSocket();
-  showConnectionScreen();
+function openSettingsModal() {
+  els.settingsError.hidden = true;
+  els.settingsIp.value = state.connectionIp || '';
+  els.settingsApiKey.value = '';
+  els.settingsModal.classList.add('is-open');
+}
+
+function closeSettingsModal() {
+  els.settingsModal.classList.remove('is-open');
+}
+
+els.settingsBtn.addEventListener('click', openSettingsModal);
+els.settingsCancelBtn.addEventListener('click', closeSettingsModal);
+
+els.settingsModal.addEventListener('click', (e) => {
+  if (e.target === els.settingsModal) closeSettingsModal();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && els.settingsModal.classList.contains('is-open')) closeSettingsModal();
+});
+
+els.settingsForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  els.settingsError.hidden = true;
+  els.settingsSaveBtn.disabled = true;
+  els.settingsSaveBtn.textContent = 'Saving…';
+
+  const payload = {
+    ip: els.settingsIp.value.trim(),
+    apiKey: els.settingsApiKey.value.trim(),
+  };
+
+  try {
+    await api('/api/connection', { method: 'PUT', body: JSON.stringify(payload) });
+    closeSettingsModal();
+    await loadConnection();
+  } catch (err) {
+    els.settingsError.textContent = err.message;
+    els.settingsError.hidden = false;
+  } finally {
+    els.settingsSaveBtn.disabled = false;
+    els.settingsSaveBtn.textContent = 'Save';
+  }
 });
 
 async function enterDashboard() {
@@ -348,6 +341,7 @@ function renderSeatGrid() {
     els.seatGrid.appendChild(buildSeatCard(seat));
   }
 
+  updateSeatSizeBounds(); // row count may have just changed
   loadAllSensitivities();
 }
 
@@ -623,7 +617,7 @@ function openSocket() {
     if (state.ws !== ws) return; // superseded by a newer socket
     setLiveStatus('reconnecting');
     setTimeout(() => {
-      if (state.activeId) openSocket();
+      if (state.connectionIp) openSocket();
     }, state.wsRetryMs);
     state.wsRetryMs = Math.min(state.wsRetryMs * 2, 15000);
   });
@@ -651,7 +645,7 @@ async function prefillDevDefaults() {
 initSeatSizeSlider();
 initFullscreenButton();
 
-loadConnections()
+loadConnection()
   .catch((err) => {
     els.connectionError.textContent = err.message;
     els.connectionError.hidden = false;

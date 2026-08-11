@@ -23,6 +23,8 @@
 html, body {
   margin: 0;
   min-height: 100%;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -100,56 +102,34 @@ main {
   color: var(--accent);
 }
 
+.btn-icon {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Connection screen */
 
 #connection-screen {
   max-width: 480px;
   margin: 0 auto;
-}
-
-#connection-screen h2 {
-  font-size: 16px;
-  color: var(--text-dim);
-  font-weight: 500;
-  margin-bottom: 12px;
-}
-
-.connection-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.connection-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-}
-
-.connection-info .ip {
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.connection-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.badge {
-  background: rgba(55, 214, 122, 0.15);
-  color: #37d67a;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .btn-sm {
@@ -165,11 +145,6 @@ main {
 .btn-sm:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.btn-sm.danger:hover {
-  border-color: var(--danger);
-  color: var(--danger);
 }
 
 .btn-all-off {
@@ -253,6 +228,92 @@ main {
   color: var(--danger);
   font-size: 13px;
   margin: 0;
+}
+
+/* Settings modal */
+
+/* display defaults to none and only .is-open switches it on -- avoids
+   relying on the `hidden` attribute for a full-screen overlay, since an
+   unconditional `display` rule here would otherwise fight the browser's
+   default `[hidden] { display: none }` at equal specificity. */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.is-open {
+  display: flex;
+}
+
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: min(360px, 90vw);
+}
+
+.modal h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.modal input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.modal input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.modal-actions button[type="submit"] {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-actions button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Dashboard */

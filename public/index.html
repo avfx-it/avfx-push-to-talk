@@ -14,17 +14,19 @@
         <span id="live-dot" class="live-dot"></span>
         <span id="live-label">Connecting&hellip;</span>
         <span id="active-name"></span>
-        <button id="switch-btn" class="btn-ghost">Switch connection</button>
+        <button id="settings-btn" class="btn-icon" title="Connection settings" aria-label="Connection settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
     <main>
       <section id="connection-screen">
-        <h2>Saved connections</h2>
-        <ul id="connection-list" class="connection-list"></ul>
-
         <form id="add-form" class="add-form">
-          <h3>Add a connection</h3>
+          <h3>Connect to your D-Cerno unit</h3>
           <label>
             IP address
             <input name="ip" placeholder="192.168.0.20" required />
@@ -33,7 +35,7 @@
             API key
             <input name="apiKey" type="password" placeholder="API key" required />
           </label>
-          <button type="submit" id="add-submit">Add &amp; connect</button>
+          <button type="submit" id="add-submit">Connect</button>
           <p id="connection-error" class="error" hidden></p>
         </form>
       </section>
@@ -54,6 +56,27 @@
       <span class="footer-divider"></span>
       <button id="fullscreen-btn" class="btn-ghost"></button>
     </footer>
+
+    <div id="settings-modal" class="modal-overlay">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+        <h3 id="settings-modal-title">Connection settings</h3>
+        <form id="settings-form">
+          <label>
+            IP address
+            <input name="ip" id="settings-ip" required />
+          </label>
+          <label>
+            API key
+            <input name="apiKey" id="settings-apikey" type="password" placeholder="Leave blank to keep current key" />
+          </label>
+          <p id="settings-error" class="error" hidden></p>
+          <div class="modal-actions">
+            <button type="button" id="settings-cancel-btn" class="btn-ghost">Cancel</button>
+            <button type="submit" id="settings-save-btn">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="/app.js"></script>
