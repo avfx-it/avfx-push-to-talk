@@ -4,6 +4,13 @@ A browser dashboard for controlling a Televic D-Cerno push-to-talk system: see e
 
 The server must run on the same LAN as the D-Cerno Conference Controller, since the controller is only reachable at its local IP address (e.g. `192.168.0.20`).
 
+## Prerequisites
+
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed and running before using either the `docker run` command or `docker compose` below:
+
+- **Mac**: [docs.docker.com/desktop/setup/install/mac-install](https://docs.docker.com/desktop/setup/install/mac-install/)
+- **Windows**: [docs.docker.com/desktop/setup/install/windows-install](https://docs.docker.com/desktop/setup/install/windows-install/)
+
 ## Run it (technician quick start)
 
 No source checkout or build required — pull the published image and run it:
