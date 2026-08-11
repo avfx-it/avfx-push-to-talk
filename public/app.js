@@ -17,6 +17,22 @@ const MIC_MUTED_ICON = `
   <line x1="8" y1="23" x2="16" y2="23"></line>
 </svg>`;
 
+const ENTER_FULLSCREEN_ICON = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+  <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+  <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+  <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+</svg>`;
+
+const EXIT_FULLSCREEN_ICON = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+  <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+  <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+  <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
+</svg>`;
+
 const els = {
   activeBar: document.getElementById('active-bar'),
   liveDot: document.getElementById('live-dot'),
@@ -35,6 +51,7 @@ const els = {
   seatSizeSlider: document.getElementById('seat-size-slider'),
   allOffBtn: document.getElementById('all-off-btn'),
   allOffExceptChairBtn: document.getElementById('all-off-except-chair-btn'),
+  fullscreenBtn: document.getElementById('fullscreen-btn'),
 };
 
 const state = {
@@ -100,6 +117,64 @@ function initSeatSizeSlider() {
     const value = Number(els.seatSizeSlider.value);
     applySeatSize(value);
     localStorage.setItem(SEAT_SIZE_KEY, String(value));
+  });
+}
+
+function fullscreenElement() {
+  return (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement ||
+    null
+  );
+}
+
+function requestFullscreen(el) {
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (fn) return fn.call(el);
+  return Promise.reject(new Error('Fullscreen is not supported in this browser'));
+}
+
+function exitFullscreenApi() {
+  const fn =
+    document.exitFullscreen ||
+    document.webkitExitFullscreen ||
+    document.mozCancelFullScreen ||
+    document.msExitFullscreen;
+  if (fn) return fn.call(document);
+  return Promise.reject(new Error('Fullscreen is not supported in this browser'));
+}
+
+function fullscreenSupported() {
+  const el = document.documentElement;
+  return Boolean(
+    el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen
+  );
+}
+
+function updateFullscreenButton() {
+  const active = Boolean(fullscreenElement());
+  els.fullscreenBtn.innerHTML = active
+    ? `${EXIT_FULLSCREEN_ICON}<span>Exit fullscreen</span>`
+    : `${ENTER_FULLSCREEN_ICON}<span>Fullscreen</span>`;
+}
+
+function initFullscreenButton() {
+  if (!fullscreenSupported()) {
+    els.fullscreenBtn.hidden = true;
+    return;
+  }
+
+  updateFullscreenButton();
+
+  els.fullscreenBtn.addEventListener('click', () => {
+    const action = fullscreenElement() ? exitFullscreenApi() : requestFullscreen(document.documentElement);
+    Promise.resolve(action).catch((err) => console.error(`Fullscreen toggle failed: ${err.message}`));
+  });
+
+  ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((event) => {
+    document.addEventListener(event, updateFullscreenButton);
   });
 }
 
@@ -398,6 +473,7 @@ async function prefillDevDefaults() {
 }
 
 initSeatSizeSlider();
+initFullscreenButton();
 
 loadConnections()
   .catch((err) => {

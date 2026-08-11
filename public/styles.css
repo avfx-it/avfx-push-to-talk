@@ -396,3 +396,20 @@ main {
   width: 220px;
   accent-color: var(--accent);
 }
+
+.footer-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.size-footer .btn-ghost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.size-footer .btn-ghost svg {
+  width: 15px;
+  height: 15px;
+}
