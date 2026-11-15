@@ -1,0 +1,65 @@
+name: Release
+
+# Every push to the flat-html branch that changes the app creates a new GitHub
+# release (v1.0.0, v1.0.1, ...) with a zip of the files that go on the USB stick.
+on:
+  push:
+    branches: [flat-html]
+    paths:
+      - index.html
+      - dcerno-relay.js
+      - README.md
+      - '*.pdf'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full history + tags to compute version and notes
+
+      - name: Compute next version
+        id: version
+        run: |
+          latest=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            next="v1.0.0"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Previous: ${latest:-none}  Next: $next"
+
+      - name: Build release zip
+        id: zip
+        run: |
+          name="dcerno-push-to-talk-${{ steps.version.outputs.next }}"
+          mkdir -p "dist/$name"
+          cp index.html dcerno-relay.js README.md "dist/$name/"
+          cp *.pdf "dist/$name/" 2>/dev/null || true
+          (cd dist && zip -r "$name.zip" "$name")
+          echo "path=dist/$name.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.next }}"
+          prev="${{ steps.version.outputs.latest }}"
+          args=(--title "$tag" --target "$GITHUB_SHA" --generate-notes)
+          if [ -n "$prev" ]; then
+            args+=(--notes-start-tag "$prev")
+          fi
+          gh release create "$tag" "${{ steps.zip.outputs.path }}" "${args[@]}"
