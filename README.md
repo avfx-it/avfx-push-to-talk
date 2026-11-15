@@ -4,6 +4,15 @@ Setup and operating walkthrough for the standalone HTML app (Televic D-Cerno con
 
 > **What this is.** A browser page that shows every seat's mic state and lets you switch mics on/off, adjust each seat's input sensitivity, and use **All Off** / **All Off Except Chair**. Changes made on the unit or at a seat show up on screen instantly. No install is needed for the basic setup.
 
+## Using the hosted website (https)
+
+When the dashboard is opened from its website instead of a file, it talks to the unit straight from the browser over the LAN, using Chrome's **Local Network Access** feature.
+
+- Use **desktop Chrome or Edge** (version 142 or newer). Safari, Firefox and phones/tablets block the connection.
+- The first time you click **Connect**, the browser asks to let the site **access other devices on your local network**. Click **Allow**.
+- If you clicked Block by mistake: click the icon left of the address bar → **Site settings** → **Local network access** → **Allow**, then reload.
+- The unit must allow calls from the website (CORS). If it doesn't, Connect fails with "Couldn't reach the unit" even when the network is fine. Use the USB-stick files and Plan B instead.
+
 ## What's on the USB stick
 
 | File | Purpose |

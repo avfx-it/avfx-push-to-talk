@@ -15,6 +15,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 body { display: flex; flex-direction: column; }
 [hidden] { display: none !important; }
 button, input { font: inherit; color: inherit; }
+#browserBanner { background: var(--on); color: #fff; padding: 10px 16px; font-weight: 600; text-align: center; }
 header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
 header h1 { margin: 0; font-size: 16px; font-weight: 600; }
 #status { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); }
@@ -82,6 +83,7 @@ input[type=range] { width: 100%; }
 </style>
 </head>
 <body>
+<div id="browserBanner" role="alert" hidden>This browser won't allow a connection to the conference unit. Open this page in Google Chrome or Microsoft Edge on a computer.</div>
 <header>
   <h1>D-Cerno Push-to-Talk <small style="font-weight:400;color:var(--muted);font-size:11px">v1.1 · gain bars</small></h1>
   <div id="status" hidden><span class="dot" id="dot"></span><span id="statusText">Connecting…</span><span id="unitName"></span>
@@ -98,11 +100,13 @@ input[type=range] { width: 100%; }
       <input id="key" type="password" autocomplete="off" required>
       <details>
         <summary>Advanced</summary>
-        <label for="via">How this page reaches the unit</label>
-        <select id="via">
-          <option value="direct">Directly from this browser (page opened as a file)</option>
-          <option value="relay">Through the relay that served this page (dcerno-relay.js)</option>
-        </select>
+        <div id="viaRow">
+          <label for="via">How this page reaches the unit</label>
+          <select id="via">
+            <option value="direct">Directly from this browser</option>
+            <option value="relay">Through the relay that served this page (dcerno-relay.js)</option>
+          </select>
+        </div>
         <label for="port">Unit API port</label>
         <input id="port" type="text" value="9080">
       </details>
@@ -177,7 +181,14 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 // ---------- config ----------
 // cfg = { ip, apiKey, port, via: 'direct' | 'relay' }
 let cfg = null;
-function loadCfg() { try { return JSON.parse(store.get('dcernoCfg') || 'null'); } catch { return null; } }
+// Served from a website over https: the relay isn't there, so the page always calls the unit directly
+// and relies on Chrome's Local Network Access to allow the plain-http call to the LAN.
+const HOSTED = location.protocol === 'https:';
+function loadCfg() {
+  let c; try { c = JSON.parse(store.get('dcernoCfg') || 'null'); } catch { c = null; }
+  if (c && HOSTED) c.via = 'direct';
+  return c;
+}
 function saveCfg(c) { cfg = c; store.set('dcernoCfg', JSON.stringify(c)); }
 
 // ---------- D-Cerno REST client (same endpoints the Node server in avfx-push-to-talk uses) ----------
@@ -196,7 +207,11 @@ async function api(path, { method = 'GET', body, query, timeoutMs = 8000, signal
   const timer = setTimeout(() => ctl.abort('timeout'), timeoutMs);
   let res;
   try {
-    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctl.signal });
+    // targetAddressSpace 'local' tells Chrome (Local Network Access) this is a LAN call: it exempts the
+    // plain-http request from mixed-content blocking on an https page and triggers the
+    // "access other devices on your local network" permission prompt. Browsers that don't know it ignore it.
+    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctl.signal,
+                             ...(direct ? { targetAddressSpace: 'local' } : {}) });
   } catch (e) {
     if (signal && signal.aborted) throw e;
     if (ctl.signal.aborted) throw new NetError(`The unit at ${cfg.ip} didn't answer in time.`);
@@ -204,8 +219,11 @@ async function api(path, { method = 'GET', body, query, timeoutMs = 8000, signal
       `Couldn't reach the unit at ${cfg.ip}.\n` +
       `• Is this computer on the same network/subnet as the Conference Controller?\n` +
       `• Is the IP right, and is the API port ${cfg.port || 9080} reachable?\n` +
-      (direct ? `• If the unit doesn't send CORS headers, browsers block direct calls — run dcerno-relay.js and open the page from it instead.\n` +
-                `• A page loaded over https:// can't call the unit's plain-http API.` : `• Is dcerno-relay.js still running?`));
+      (!direct ? `• Is dcerno-relay.js still running?` :
+       HOSTED ? `• Use desktop Chrome or Edge, and click Allow when asked to "access other devices on your local network". ` +
+                `If you blocked it, click the icon left of the address bar → Site settings → Local network access → Allow, then reload.\n` +
+                `• The unit must send CORS headers that allow this website.`
+              : `• If the unit doesn't send CORS headers, browsers block direct calls — run dcerno-relay.js and open the page from it instead.`));
   } finally { clearTimeout(timer); }
   if (res.status === 401 || res.status === 403) throw new HttpError('The unit rejected the API key.', res.status);
   if (res.status === 204) return null;
@@ -417,8 +435,23 @@ $('fsBtn').onclick = () => { const on = document.fullscreenElement || document.w
   const p = on ? (document.exitFullscreen || document.webkitExitFullscreen).call(document) : (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl);
   Promise.resolve(p).catch(() => {}); };
 
-// boot: if we served from the relay, default to relay mode
-if (location.protocol.startsWith('http')) $('via').value = 'relay';
+// Only desktop Chrome and Edge let this page reach the unit (Local Network Access). Others get a red banner.
+function isDesktopChromeOrEdge() {
+  const uad = navigator.userAgentData;
+  if (uad && Array.isArray(uad.brands)) {
+    return !uad.mobile && uad.brands.some(b => b.brand === 'Google Chrome' || b.brand === 'Microsoft Edge');
+  }
+  // Fallback for browsers without userAgentData (Safari, Firefox, older Chromium).
+  const ua = navigator.userAgent;
+  if (/Mobi|Android|iPhone|iPad/i.test(ua)) return false;
+  if (/OPR\/|Opera|Vivaldi|YaBrowser|SamsungBrowser/i.test(ua)) return false;
+  return /Edg\//.test(ua) || /Chrome\//.test(ua);
+}
+if (!isDesktopChromeOrEdge()) $('browserBanner').hidden = false;
+
+// boot: hosted over https → always direct (no relay to talk to); served over http by the relay → relay mode
+if (HOSTED) { $('via').value = 'direct'; $('viaRow').hidden = true; }
+else if (location.protocol === 'http:') $('via').value = 'relay';
 cfg = loadCfg();
 if (cfg && cfg.ip && cfg.apiKey) enter().catch(ex => { showScreen('connect'); $('ip').value = cfg.ip; $('connectErr').textContent = ex.message; $('connectErr').hidden = false; });
 else showScreen('connect');
