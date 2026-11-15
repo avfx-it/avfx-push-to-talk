@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s http://localhost:3000/api/connections)",
+      "Bash(curl -s http://localhost:3000/api/dev-defaults)",
+      "Bash(curl -s -c cookies.txt -X POST http://localhost:3000/api/connections -H 'Content-Type: application/json' -d '{\"name\":\"Test Room\",\"ip\":\"192.168.0.20\",\"apiKey\":\"56f2691c-1916-40ef-ba04-93de56b44deb\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -b cookies.txt http://localhost:3000/api/seats -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b cookies.txt -X PUT http://localhost:3000/api/seats/75/mic -H \"Content-Type: application/json\" -d '{\"on\":true}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b cookies.txt http://localhost:3000/api/seats)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([s for s in d['seats'] if s['seatNumber']==75]\\)\")",
+      "Bash(curl -s -H \"Authorization: Bearer 56f2691c-1916-40ef-ba04-93de56b44deb\" http://192.168.0.20:9080/api/discussion/settings -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -H \"Authorization: Bearer 56f2691c-1916-40ef-ba04-93de56b44deb\" http://192.168.0.20:9080/api/discussion/seats/75 -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -X PUT -H \"Authorization: Bearer 56f2691c-1916-40ef-ba04-93de56b44deb\" -H \"Content-Type: application/json\" -d '{\"microphoneOn\": true}' http://192.168.0.20:9080/api/discussion/seats/75 -w \"\\\\nHTTP %{http_code}\\\\n\" -v)",
+      "Bash(curl -s -H \"Authorization: Bearer 56f2691c-1916-40ef-ba04-93de56b44deb\" http://192.168.0.20:9080/api/discussion/seats/75)",
+      "Bash(curl -s -b cookies.txt -X PUT http://localhost:3000/api/seats/75/mic -H \"Content-Type: application/json\" -d '{\"on\":false}' -w \"restored mic to off \\(HTTP %{http_code}\\)\\\\n\")",
+      "Bash(open http://localhost:3000)",
+      "Bash(curl -s -c /tmp/c2.txt -X POST http://localhost:3000/api/connections -H \"Content-Type: application/json\" -d '{\"ip\":\"192.168.0.20\",\"apiKey\":\"56f2691c-1916-40ef-ba04-93de56b44deb\"}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -c cookies.txt -X POST http://localhost:3000/api/connections -H \"Content-Type: application/json\" -d '{\"ip\":\"192.168.0.20\",\"apiKey\":\"56f2691c-1916-40ef-ba04-93de56b44deb\"}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b cookies.txt -X PUT http://localhost:3000/api/seats/75/mic -H \"Content-Type: application/json\" -d '{\"on\":true}' -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b cookies.txt -X POST http://localhost:3000/api/seats/all-off-except-chair -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b cookies.txt -X POST http://localhost:3000/api/seats/all-off -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(npm install *)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh repo *)",
+      "Bash(git push *)"
+    ]
+  }
+}

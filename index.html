@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D-Cerno Push-to-Talk</title>
+<style>
+:root {
+  --bg: #0f1115; --panel: #171a21; --card: #1d212a; --line: #2b303b; --text: #e8eaf0; --muted: #8a92a3;
+  --on: #e5484d; --on-bg: #3a1618; --ok: #30a46c; --warn: #f5a524; --offline: #3a3f4a; --accent: #4c8dff;
+  --seat-size: 120px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; }
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+#status { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--offline); }
+.dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.dot.retry { background: var(--warn); animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+button { background: #272c37; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:hover { background: #313847; }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { background: #5a1d20; border-color: #7a2a2e; }
+button.danger:hover { background: #75262a; }
+main { flex: 1; overflow: auto; padding: 16px; }
+.center { max-width: 420px; margin: 8vh auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+.center h2 { margin: 0 0 14px; font-size: 18px; }
+label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 12px; }
+input[type=text], input[type=password], select { width: 100%; padding: 9px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); }
+.err { color: #ff8a8d; margin-top: 12px; white-space: pre-wrap; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+details { margin-top: 14px; color: var(--muted); }
+.bulk { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.bulk .spacer { flex: 1; }
+.pill { padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.pill b { color: var(--text); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--seat-size), 1fr)); gap: 8px; }
+.seat { position: relative; aspect-ratio: 16 / 9; background: var(--card); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; user-select: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; transition: background .12s, border-color .12s; }
+.seat:hover { border-color: #46506a; }
+.seat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seat { overflow: hidden; min-height: 0; gap: 0; padding-top: calc(var(--seat-size) * .09); padding-bottom: 12px; box-sizing: border-box; }
+.seat .num { font-size: calc(var(--seat-size) * .26); font-weight: 700; line-height: 1; }
+.seat .name { position: absolute; top: 5px; left: 30%; right: 26%; text-align: center; font-size: calc(var(--seat-size) * .1); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat svg { width: calc(var(--seat-size) * .17); height: calc(var(--seat-size) * .17); margin-top: calc(var(--seat-size) * .03); }
+.seat .ico-on { display: none; }
+.seat.mic-on { background: var(--on-bg); border-color: var(--on); }
+.seat.mic-on .ico-on { display: block; color: var(--on); }
+.seat.mic-on .ico-off { display: none; }
+.seat .ico-off { color: var(--muted); }
+.seat.offline { opacity: .45; cursor: not-allowed; border-style: dashed; }
+.seat.pending { opacity: .7; }
+.seat.req { border-color: var(--warn); animation: reqpulse 1.2s infinite; }
+@keyframes reqpulse { 50% { box-shadow: 0 0 0 3px rgba(245,165,36,.35); } }
+.tag { position: absolute; left: 6px; bottom: 14px; font-size: calc(var(--seat-size) * .09); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tag.chairperson { color: #ffd479; } .tag.vip { color: #9ec1ff; }
+.reqtag { position: absolute; right: 6px; bottom: 14px; font-size: calc(var(--seat-size) * .09); font-weight: 700; color: var(--warn); }
+.gain { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: #0004; border-top: 1px solid var(--line); }
+.gain::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #ffffff55; }
+.gain.unk { background: repeating-linear-gradient(45deg,#ffffff10 0 4px,transparent 4px 8px); }
+.gain i { position: absolute; top: 0; bottom: 0; background: #5b9dff; transition: left .15s, width .15s; }
+.gain.pos i { background: #f5a524; } .gain.max i { background: #ef4444; }
+.seat.mic-on .gain { border-top-color: var(--on); }
+.sens { position: absolute; left: 6px; top: 5px; font-size: calc(var(--seat-size) * .09); color: var(--muted); }
+.menu { position: absolute; right: 4px; top: 3px; padding: 0 8px; border: 0; background: transparent; font-size: calc(var(--seat-size) * .18); line-height: 1.2; color: var(--muted); }
+.menu:hover { background: #ffffff14; color: var(--text); }
+footer { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+footer input[type=range] { width: 160px; }
+.overlay { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal { width: min(380px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.modal h3 { margin: 0 0 4px; }
+.modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.sensval { font-size: 28px; font-weight: 700; text-align: center; margin: 14px 0 4px; }
+input[type=range] { width: 100%; }
+#toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); background: #4a1c1f; border: 1px solid #7a2a2e; padding: 9px 14px; border-radius: 8px; z-index: 20; max-width: 90vw; }
+</style>
+</head>
+<body>
+<header>
+  <h1>D-Cerno Push-to-Talk <small style="font-weight:400;color:var(--muted);font-size:11px">v1.1 · gain bars</small></h1>
+  <div id="status" hidden><span class="dot" id="dot"></span><span id="statusText">Connecting…</span><span id="unitName"></span>
+    <button id="settingsBtn" title="Connection settings">Settings</button></div>
+</header>
+
+<main>
+  <section id="connectScreen" class="center">
+    <h2>Connect to your D-Cerno unit</h2>
+    <form id="connectForm">
+      <label for="ip">Conference Controller IP address</label>
+      <input id="ip" type="text" placeholder="192.168.0.20" autocomplete="off" required>
+      <label for="key">API key <span style="opacity:.7">(from the unit's “API Settings &amp; Type” page)</span></label>
+      <input id="key" type="password" autocomplete="off" required>
+      <details>
+        <summary>Advanced</summary>
+        <label for="via">How this page reaches the unit</label>
+        <select id="via">
+          <option value="direct">Directly from this browser (page opened as a file)</option>
+          <option value="relay">Through the relay that served this page (dcerno-relay.js)</option>
+        </select>
+        <label for="port">Unit API port</label>
+        <input id="port" type="text" value="9080">
+      </details>
+      <div style="margin-top:16px"><button class="primary" id="connectBtn" type="submit">Connect</button></div>
+      <div class="err" id="connectErr" hidden></div>
+      <div class="hint">The key is saved only in this browser (localStorage) so you don't retype it.</div>
+    </form>
+  </section>
+
+  <section id="dash" hidden>
+    <div class="bulk">
+      <button id="allOff" class="danger">All Off</button>
+      <button id="allOffChair" class="danger">All Off Except Chair</button>
+      <span class="spacer"></span>
+      <span class="pill"><b id="onCount">0</b> mics on</span>
+      <span class="pill"><b id="reqCount">0</b> requesting</span>
+      <span class="pill"><b id="onlineCount">0</b> / <b id="totalCount">0</b> seats online</span>
+    </div>
+    <div id="grid" class="grid"></div>
+    <p id="empty" class="hint" hidden>No seats found on this unit.</p>
+  </section>
+</main>
+
+<footer id="foot" hidden>
+  <label for="size" style="margin:0">Seat size</label>
+  <input id="size" type="range" min="70" max="260" step="2" value="120">
+  <span style="flex:1"></span>
+  <button id="fsBtn">Fullscreen</button>
+</footer>
+
+<div id="seatModal" class="overlay" hidden>
+  <div class="modal">
+    <h3 id="smTitle">Seat</h3>
+    <div class="hint" id="smRole"></div>
+    <label for="smName">Label (saved in this browser)</label>
+    <input id="smName" type="text" placeholder="e.g. Jane – Head Table" maxlength="40">
+    <label>Input sensitivity</label>
+    <div class="sensval" id="smVal">—</div>
+    <input id="smSens" type="range" min="-12" max="12" step="1" value="0" disabled>
+    <div class="row"><button id="smClose" class="primary">Done</button></div>
+  </div>
+</div>
+
+<div id="settingsModal" class="overlay" hidden>
+  <div class="modal">
+    <h3>Connection</h3>
+    <div class="hint" id="setInfo"></div>
+    <div class="row" style="justify-content:flex-start;flex-wrap:wrap">
+      <button id="setChange">Change unit / key</button>
+      <button id="setForget" class="danger">Disconnect &amp; forget key</button>
+    </div>
+    <div class="row"><button id="setClose" class="primary">Close</button></div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+// ---------- tiny helpers ----------
+const $ = id => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const MIC = '<svg class="ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>' +
+            '<svg class="ico-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>';
+let toastTimer;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 5000); }
+
+// ---------- config ----------
+// cfg = { ip, apiKey, port, via: 'direct' | 'relay' }
+let cfg = null;
+function loadCfg() { try { return JSON.parse(store.get('dcernoCfg') || 'null'); } catch { return null; } }
+function saveCfg(c) { cfg = c; store.set('dcernoCfg', JSON.stringify(c)); }
+
+// ---------- D-Cerno REST client (same endpoints the Node server in avfx-push-to-talk uses) ----------
+class NetError extends Error {}
+class HttpError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+
+async function api(path, { method = 'GET', body, query, timeoutMs = 8000, signal } = {}) {
+  const direct = cfg.via === 'direct';
+  const url = new URL(path, direct ? `http://${cfg.ip}:${cfg.port || 9080}` : location.origin);
+  for (const [k, v] of Object.entries(query || {})) if (v != null) url.searchParams.set(k, v);
+  const headers = { Authorization: `Bearer ${cfg.apiKey}` };
+  if (!direct) headers['X-Dcerno-Target'] = `${cfg.ip}:${cfg.port || 9080}`;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const ctl = new AbortController();
+  if (signal) signal.addEventListener('abort', () => ctl.abort());
+  const timer = setTimeout(() => ctl.abort('timeout'), timeoutMs);
+  let res;
+  try {
+    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctl.signal });
+  } catch (e) {
+    if (signal && signal.aborted) throw e;
+    if (ctl.signal.aborted) throw new NetError(`The unit at ${cfg.ip} didn't answer in time.`);
+    throw new NetError(
+      `Couldn't reach the unit at ${cfg.ip}.\n` +
+      `• Is this computer on the same network/subnet as the Conference Controller?\n` +
+      `• Is the IP right, and is the API port ${cfg.port || 9080} reachable?\n` +
+      (direct ? `• If the unit doesn't send CORS headers, browsers block direct calls — run dcerno-relay.js and open the page from it instead.\n` +
+                `• A page loaded over https:// can't call the unit's plain-http API.` : `• Is dcerno-relay.js still running?`));
+  } finally { clearTimeout(timer); }
+  if (res.status === 401 || res.status === 403) throw new HttpError('The unit rejected the API key.', res.status);
+  if (res.status === 204) return null;
+  if (!res.ok) throw new HttpError(`Unit returned ${res.status} for ${method} ${path}`, res.status);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+const getRoomSeats = () => api('/api/room/seats/discussion');
+const getDiscSeats = () => api('/api/discussion/seats');
+// The device returns 400 if either field is missing, so always send both (learned from the original repo).
+const putMic = (n, on, req) => api(`/api/discussion/seats/${n}`, { method: 'PUT', body: { microphoneOn: on, requestingToSpeak: Boolean(req) } });
+const getSens = n => api(`/api/audio/seats/${n}/inputsensitivityoffset`);
+const putSens = (n, v) => api(`/api/audio/seats/${n}/inputsensitivityoffset`, { method: 'PUT', body: { input_sensitivity_offset: v } });
+
+// ---------- state ----------
+const seats = new Map();      // seatNumber -> {seatNumber, online, role, microphoneOn, requestingToSpeak}
+const sens = new Map();       // seatNumber -> dB offset
+let names = {};               // seatNumber -> label
+let pollCtl = null, pollGen = 0, minimumId = null;
+
+function mergeSeats(room, disc) {
+  const byNum = new Map(disc.map(s => [s.seatNumber, s]));
+  return room.map(r => {
+    const d = byNum.get(r.seatNumber) || {};
+    return { seatNumber: r.seatNumber, online: r.state === 'online', role: d.role || r.role || null,
+             microphoneOn: Boolean(d.microphoneOn), requestingToSpeak: Boolean(d.requestingToSpeak) };
+  }).sort((a, b) => a.seatNumber - b.seatNumber);
+}
+async function loadSeats() {
+  const [room, disc] = await Promise.all([getRoomSeats(), getDiscSeats()]);
+  seats.clear();
+  for (const s of mergeSeats(room, disc)) seats.set(s.seatNumber, s);
+}
+
+// ---------- live events (long-poll, same protocol the original server uses) ----------
+function setStatus(kind) {
+  $('dot').className = 'dot ' + (kind === 'live' ? 'live' : kind === 'retry' ? 'retry' : '');
+  $('statusText').textContent = kind === 'live' ? 'Live' : kind === 'retry' ? 'Reconnecting…' : 'Connecting…';
+}
+async function pollLoop(gen) {
+  let backoff = 1000;
+  while (gen === pollGen) {
+    pollCtl = new AbortController();
+    try {
+      const ev = await api('/api/notification/events', {
+        query: { 'include-filter': 'Discussion,Room', 'minimum-id': minimumId }, timeoutMs: 65000, signal: pollCtl.signal });
+      if (gen !== pollGen) return;
+      setStatus('live'); backoff = 1000;
+      if (!ev) continue;                       // 204 = long-poll timed out, ask again
+      minimumId = ev.id + 1;
+      if (ev.discontinuity) { await loadSeats(); renderGrid(); continue; }  // missed events -> full resync
+      applyEvent(ev);
+    } catch (e) {
+      if (gen !== pollGen) return;
+      if (e instanceof HttpError && e.status === 401) { toast(e.message); setStatus('retry'); }
+      setStatus('retry');
+      await new Promise(r => setTimeout(r, backoff)); backoff = Math.min(backoff * 2, 15000);
+    }
+  }
+}
+function applyEvent(ev) {
+  const d = ev.data, old = seats.get(d && d.seatNumber);
+  if (ev.module === 'Discussion' && ev.name === 'SeatChanged') {
+    upsert({ seatNumber: d.seatNumber, online: old ? old.online : true, role: d.role || (old && old.role) || null,
+             microphoneOn: Boolean(d.microphoneOn), requestingToSpeak: Boolean(d.requestingToSpeak) });
+  } else if (ev.module === 'Room' && (ev.name === 'SeatChanged' || ev.name === 'SeatAdded')) {
+    upsert({ seatNumber: d.seatNumber, online: d.state === 'online', role: d.role || (old && old.role) || null,
+             microphoneOn: old ? old.microphoneOn : false, requestingToSpeak: old ? old.requestingToSpeak : false });
+  } else if (ev.module === 'Room' && ev.name === 'SeatRemoved') {
+    seats.delete(d); const el = cardEl(d); if (el) el.remove(); updateCounts();
+  }
+}
+function upsert(seat) {
+  const isNew = !seats.has(seat.seatNumber);
+  seats.set(seat.seatNumber, seat);
+  if (isNew) { renderGrid(); if (!sens.has(seat.seatNumber)) fetchSens(seat.seatNumber); } else paintCard(seat);
+  updateCounts();
+}
+
+// ---------- rendering ----------
+const cardEl = n => $('grid').querySelector(`[data-seat="${n}"]`);
+const ROLE = { vip: 'VIP', chairperson: 'Chair', delegate: '' };
+function fmtSens(v) { return v == null ? '–' : v > 0 ? `+${v}` : `${v}`; }
+function paintCard(seat) {
+  const el = cardEl(seat.seatNumber); if (!el) return;
+  el.classList.toggle('mic-on', seat.microphoneOn);
+  el.classList.toggle('offline', !seat.online);
+  el.classList.toggle('req', seat.requestingToSpeak && !seat.microphoneOn);
+  el.querySelector('.reqtag').textContent = seat.requestingToSpeak && !seat.microphoneOn ? 'REQ' : '';
+  const tag = el.querySelector('.tag'); tag.textContent = ROLE[seat.role] || ''; tag.className = 'tag ' + (seat.role || '');
+  el.querySelector('.name').textContent = names[seat.seatNumber] || '';
+  el.querySelector('.sens').textContent = sens.has(seat.seatNumber) ? fmtSens(sens.get(seat.seatNumber)) + ' dB' : '';
+  const g = el.querySelector('.gain'), gv = sens.get(seat.seatNumber);
+  g.hidden = false; g.classList.toggle('unk', gv == null); if (gv == null) { g.firstChild.style.width = '0'; g.title = 'Gain unavailable (unit did not return a value)'; }
+  if (gv != null) { const w = Math.abs(gv) / 12 * 50; g.firstChild.style.width = w + '%'; g.firstChild.style.left = (gv >= 0 ? 50 : 50 - w) + '%'; g.classList.toggle('pos', gv > 0); g.classList.toggle('max', gv >= 9); g.title = 'Input sensitivity ' + fmtSens(gv) + ' dB'; }
+  el.setAttribute('aria-pressed', String(seat.microphoneOn));
+  el.setAttribute('aria-label', `Seat ${seat.seatNumber}${names[seat.seatNumber] ? ' ' + names[seat.seatNumber] : ''}, microphone ${seat.microphoneOn ? 'on' : 'off'}`);
+}
+function renderGrid() {
+  const g = $('grid'); g.textContent = '';
+  const list = [...seats.values()].sort((a, b) => a.seatNumber - b.seatNumber);
+  $('empty').hidden = list.length > 0;
+  for (const seat of list) {
+    const el = document.createElement('div');
+    el.className = 'seat'; el.dataset.seat = seat.seatNumber; el.tabIndex = 0; el.setAttribute('role', 'button');
+    el.innerHTML = `<span class="sens"></span><button class="menu" tabindex="-1" aria-label="Seat options" title="Label &amp; sensitivity">⋯</button>
+      <span class="num">${seat.seatNumber}</span>${MIC}<span class="name"></span><span class="tag"></span><span class="reqtag"></span><div class="gain" title="Input sensitivity"><i></i></div>`;
+    el.addEventListener('click', e => { if (e.target.closest('.menu')) { openSeatModal(seat.seatNumber); } else toggleMic(seat.seatNumber); });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMic(seat.seatNumber); } else if (e.key.toLowerCase() === 'm') openSeatModal(seat.seatNumber); });
+    g.appendChild(el); paintCard(seat);
+  }
+  updateCounts();
+}
+function updateCounts() {
+  const l = [...seats.values()];
+  $('onCount').textContent = l.filter(s => s.microphoneOn).length;
+  $('reqCount').textContent = l.filter(s => s.requestingToSpeak && !s.microphoneOn).length;
+  $('onlineCount').textContent = l.filter(s => s.online).length;
+  $('totalCount').textContent = l.length;
+}
+
+// ---------- actions ----------
+async function toggleMic(n) {
+  const seat = seats.get(n); if (!seat || !seat.online) return;
+  const el = cardEl(n), desired = !seat.microphoneOn;
+  seats.set(n, { ...seat, microphoneOn: desired }); paintCard(seats.get(n)); updateCounts(); el && el.classList.add('pending');
+  try { await putMic(n, desired, seat.requestingToSpeak); }
+  catch (e) { seats.set(n, seat); paintCard(seat); updateCounts(); toast(`Seat ${n}: ${e.message.split('\n')[0]}`); }
+  finally { el && el.classList.remove('pending'); }
+}
+async function bulkOff(exceptChair) {
+  const targets = [...seats.values()].filter(s => s.microphoneOn && !(exceptChair && s.role === 'chairperson'));
+  const results = await Promise.allSettled(targets.map(s => putMic(s.seatNumber, false, s.requestingToSpeak)));
+  const failed = results.filter(r => r.status === 'rejected').length;
+  if (failed) toast(`${failed} of ${targets.length} mics failed to turn off — check the unit.`);
+}
+let sensWarned = false;
+async function fetchSens(n) {
+  try { const r = await getSens(n); if (typeof r.input_sensitivity_offset !== 'number') throw new Error('no input_sensitivity_offset in reply: ' + JSON.stringify(r).slice(0,80)); sens.set(n, r.input_sensitivity_offset); const s = seats.get(n); if (s) paintCard(s); }
+  catch (e) { if (!sensWarned) { sensWarned = true; toast('Gain bars: could not read seat ' + n + ' gain — ' + String(e.message).split('\n')[0]); } }
+}
+async function fetchAllSens() { await Promise.all([...seats.keys()].map(fetchSens)); }
+
+// ---------- seat modal ----------
+let modalSeat = null, sensTimer;
+function openSeatModal(n) {
+  modalSeat = n; const seat = seats.get(n);
+  $('smTitle').textContent = `Seat ${n}`;
+  $('smRole').textContent = [ROLE[seat.role] || (seat.role || 'Delegate'), seat.online ? 'online' : 'offline'].join(' · ');
+  $('smName').value = names[n] || '';
+  const sl = $('smSens'); sl.disabled = true; $('smVal').textContent = '…';
+  $('seatModal').hidden = false;
+  getSens(n).then(r => { if (modalSeat !== n) return; const v = r.input_sensitivity_offset; sens.set(n, v); sl.value = v; sl.disabled = false; $('smVal').textContent = fmtSens(v) + ' dB'; paintCard(seat); })
+            .catch(() => { $('smVal').textContent = 'unavailable'; });
+}
+$('smSens').addEventListener('input', () => {
+  const n = modalSeat, v = Number($('smSens').value); $('smVal').textContent = fmtSens(v) + ' dB';
+  clearTimeout(sensTimer); sensTimer = setTimeout(async () => {
+    try { await putSens(n, v); sens.set(n, v); const s = seats.get(n); if (s) paintCard(s); } catch (e) { toast(`Sensitivity: ${e.message.split('\n')[0]}`); }
+  }, 150);
+});
+$('smName').addEventListener('input', () => {
+  const v = $('smName').value.trim(); if (v) names[modalSeat] = v; else delete names[modalSeat];
+  store.set('dcernoNames:' + cfg.ip, JSON.stringify(names)); const s = seats.get(modalSeat); if (s) paintCard(s);
+});
+function closeSeatModal() { modalSeat = null; $('seatModal').hidden = true; }
+$('smClose').onclick = closeSeatModal;
+$('seatModal').addEventListener('click', e => { if (e.target === $('seatModal')) closeSeatModal(); });
+
+// ---------- connect / settings ----------
+function showScreen(which) {
+  $('connectScreen').hidden = which !== 'connect'; $('dash').hidden = which !== 'dash';
+  $('status').hidden = which !== 'dash'; $('foot').hidden = which !== 'dash';
+}
+async function enter() {
+  showScreen('dash'); $('unitName').textContent = cfg.ip; setStatus('connecting');
+  try { names = JSON.parse(store.get('dcernoNames:' + cfg.ip) || '{}'); } catch { names = {}; }
+  await loadSeats(); renderGrid(); fetchAllSens(); clearInterval(sensPoll); sensPoll = setInterval(fetchAllSens, 30000); setStatus('live');
+  minimumId = null; pollGen++; if (pollCtl) pollCtl.abort(); pollLoop(pollGen);
+}
+let sensPoll;
+function stop() { clearInterval(sensPoll); pollGen++; if (pollCtl) pollCtl.abort(); seats.clear(); sens.clear(); }
+
+$('connectForm').addEventListener('submit', async e => {
+  e.preventDefault(); const err = $('connectErr'); err.hidden = true;
+  $('connectBtn').disabled = true; $('connectBtn').textContent = 'Connecting…';
+  const trial = { ip: $('ip').value.trim(), apiKey: $('key').value.trim(), port: $('port').value.trim() || '9080', via: $('via').value };
+  const prev = cfg; cfg = trial;
+  try { await getRoomSeats(); saveCfg(trial); $('key').value = ''; await enter(); }
+  catch (ex) { cfg = prev; err.textContent = ex.message; err.hidden = false; showScreen('connect'); }
+  finally { $('connectBtn').disabled = false; $('connectBtn').textContent = 'Connect'; }
+});
+$('settingsBtn').onclick = () => { $('setInfo').textContent = `Connected to ${cfg.ip}:${cfg.port || 9080} (${cfg.via === 'direct' ? 'direct from browser' : 'via relay'}).`; $('settingsModal').hidden = false; };
+$('setClose').onclick = () => $('settingsModal').hidden = true;
+$('setChange').onclick = () => { $('settingsModal').hidden = true; stop(); $('ip').value = cfg.ip; $('port').value = cfg.port || '9080'; $('via').value = cfg.via; $('key').value = ''; showScreen('connect'); };
+$('setForget').onclick = () => { $('settingsModal').hidden = true; stop(); store.del('dcernoCfg'); cfg = null; $('key').value = ''; showScreen('connect'); };
+$('allOff').onclick = () => bulkOff(false);
+$('allOffChair').onclick = () => bulkOff(true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeSeatModal(); $('settingsModal').hidden = true; } });
+
+// seat size + fullscreen
+const sizeEl = $('size');
+const applySize = v => document.documentElement.style.setProperty('--seat-size', v + 'px');
+const savedSize = Number(store.get('dcernoSeatSize')); if (savedSize) { sizeEl.value = savedSize; applySize(savedSize); }
+sizeEl.addEventListener('input', () => { applySize(sizeEl.value); store.set('dcernoSeatSize', sizeEl.value); });
+const fsEl = document.documentElement;
+if (!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen)) $('fsBtn').hidden = true;
+$('fsBtn').onclick = () => { const on = document.fullscreenElement || document.webkitFullscreenElement;
+  const p = on ? (document.exitFullscreen || document.webkitExitFullscreen).call(document) : (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl);
+  Promise.resolve(p).catch(() => {}); };
+
+// boot: if we served from the relay, default to relay mode
+if (location.protocol.startsWith('http')) $('via').value = 'relay';
+cfg = loadCfg();
+if (cfg && cfg.ip && cfg.apiKey) enter().catch(ex => { showScreen('connect'); $('ip').value = cfg.ip; $('connectErr').textContent = ex.message; $('connectErr').hidden = false; });
+else showScreen('connect');
+</script>
+</body>
+</html>
