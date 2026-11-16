@@ -1,0 +1,31 @@
+# Copy this file into a hosted app's repo as:
+#   .github/workflows/notify-avfx-tools.yml
+#
+# When that repo's published branch is pushed, it tells the AVFX Tools repo to
+# rebuild avfx.app, which downloads the new version of the app.
+#
+# Needs one secret in the app repo (or once at the GitHub organization level):
+#   AVFX_TOOLS_DISPATCH_TOKEN – a fine-grained token with
+#   "Contents: Read and write" on the AVFX Tools repo only.
+
+name: Notify AVFX Tools
+
+on:
+  push:
+    branches: [hosted] # the branch named in the app's .yml (hosted.branch)
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask AVFX Tools to redeploy
+        env:
+          GH_TOKEN: ${{ secrets.AVFX_TOOLS_DISPATCH_TOKEN }}
+          AVFX_TOOLS_REPO: avfx-it/avfx-app # ← the AVFX Tools (dashboard) repo
+        run: |
+          gh api "repos/${AVFX_TOOLS_REPO}/dispatches" \
+            -f event_type=app-published \
+            -f "client_payload[repo]=${{ github.repository }}" \
+            -f "client_payload[sha]=${{ github.sha }}"
+          echo "Requested a redeploy of ${AVFX_TOOLS_REPO}"
