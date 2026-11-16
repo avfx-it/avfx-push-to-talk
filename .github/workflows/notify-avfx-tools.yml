@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Ask AVFX Tools to redeploy
         env:
-          GH_TOKEN: ${{ secrets.AVFX_TOOLS_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.APPS_TOOLS_DISPATCH_TOKEN }}
           AVFX_TOOLS_REPO: avfx-it/avfx-app # ← the AVFX Tools (dashboard) repo
         run: |
           gh api "repos/${AVFX_TOOLS_REPO}/dispatches" \
